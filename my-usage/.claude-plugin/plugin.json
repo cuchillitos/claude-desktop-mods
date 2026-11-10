@@ -1,0 +1,10 @@
+{
+  "name": "my-usage",
+  "version": "0.1.0",
+  "description": "5-hour and weekly subscription usage as color-coded bars above the prompt (green, yellow, red). Based on midudev's sub-meter.",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Javier Lopez"
+  },
+  "license": "MIT"
+}
