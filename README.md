@@ -10,7 +10,7 @@ Two small mods for Claude Code that draw in a band above the prompt, built for t
 In a terminal session of Claude Code:
 
 ```
-/plugin marketplace add OWNER/REPO
+/plugin marketplace add cuchillitos/claude-desktop-mods
 /plugin install my-usage@claude-desktop-mods
 /plugin install my-narrator@claude-desktop-mods
 ```
@@ -18,12 +18,12 @@ In a terminal session of Claude Code:
 From a shell:
 
 ```
-claude plugin marketplace add OWNER/REPO
+claude plugin marketplace add cuchillitos/claude-desktop-mods
 claude plugin install my-usage@claude-desktop-mods
 claude plugin install my-narrator@claude-desktop-mods
 ```
 
-Choose the user scope to have them in every session; they then load in the desktop app's Code tab too. In the desktop app, where `/plugin` does not run: click + next to the prompt box, then Plugins, Add marketplace with `OWNER/REPO`, then Add plugin.
+Choose the user scope to have them in every session; they then load in the desktop app's Code tab too. In the desktop app, where `/plugin` does not run: click + next to the prompt box, then Plugins, Add marketplace with `cuchillitos/claude-desktop-mods`, then Add plugin.
 
 ## Credits
 
