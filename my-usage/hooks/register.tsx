@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderNode, SessionRateLimit } from 'claude-code'
 
 import type { Limit } from '../types'
+import { narratorSlot, registerNarrator, startNarrator } from './narrator'
 
 const limits = atom({ plugin: 'my-usage', key: 'limits' } as const, [] as Limit[])
 const tick = atom({ plugin: 'my-usage', key: 'tick' } as const, 0)
@@ -52,30 +53,28 @@ function meterSvg (label: string, used: number, resetIn: string, x: number) {
   return { svg, width: labelW + bar + resetW + 18 }
 }
 
-/** The band is one row of three slots (left, center, right) that the mods share: each fills its own and keeps the others'. */
-const SLOTS = 'band-slots'
+/** The band is one row of three slots: usage left, narrator toggle center, usage right. */
 const WIDTHS = ['38%', '24%', '38%'] as const
 const JUSTIFY = ['flex-start', 'center', 'flex-end'] as const
 
-function band ($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0], beneath: RenderNode | undefined, own: [RenderNode?, RenderNode?, RenderNode?]): RenderNode {
+function band ($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0], own: [RenderNode?, RenderNode?, RenderNode?]): RenderNode {
   const { Box } = $.ui.resolve(e)
-  const isShared = typeof beneath === 'object' && beneath !== null && beneath.type === 'Box' && (beneath.props as { key?: string }).key === SLOTS
-  const prior = isShared ? ((beneath as { children?: RenderNode[] }).children ?? []) : []
-  const cells = [0, 1, 2].map(i => own[i] !== undefined
-    ? <Box width={WIDTHS[i]} flexDirection="row" justifyContent={JUSTIFY[i]} alignItems="center">{own[i]}</Box>
-    : prior[i] ?? <Box width={WIDTHS[i]} />)
   return (
-    <Box key={SLOTS} flexDirection="row" flexGrow={1} alignItems="center">
-      {cells}
-      {isShared ? prior[3] ?? null : beneath}
+    <Box flexDirection="row" flexGrow={1} alignItems="center">
+      {[0, 1, 2].map(i => (
+        <Box width={WIDTHS[i]} flexDirection="row" justifyContent={JUSTIFY[i]} alignItems="center">{own[i]}</Box>
+      ))}
     </Box>
   )
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  registerNarrator(on, options)
+
   on('session.start', async ($, e, next) => {
     const saved = await $.store.get('limits')
     if (Array.isArray(saved)) await update($, limits, () => saved as Limit[])
+    await startNarrator($)
     const usage = await $.session.usage()
     await remember($, windowsOf(usage.rateLimits))
     // Redraw once a minute so reset countdowns stay fresh.
@@ -92,7 +91,9 @@ export const register: Register = on => {
     const beneath = await next(e)
     const all = await read($, limits)
     await read($, tick)
-    if (all.length === 0 || e.props.hasSurvey) return beneath
+    if (e.props.hasSurvey) return beneath
+    const toggle = await narratorSlot($, e)
+    if (all.length === 0) return band($, e, [undefined, toggle, undefined])
 
     const now = await $.clock.now()
     const rows = all.map(limit => {
@@ -114,7 +115,7 @@ export const register: Register = on => {
         const source = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} 20" font-family="-apple-system, system-ui, sans-serif">${meter.svg}</svg>`
         return <Svg source={source} alt={`${row.label} ${Math.round(row.used)}% used`} width={width} height={20} />
       }
-      return band($, e, beneath, [draw(rows[0]!), undefined, rows[1] ? draw(rows[1]) : undefined])
+      return band($, e, [draw(rows[0]!), toggle, rows[1] ? draw(rows[1]) : undefined])
     }
 
     const { Box, Text } = table
@@ -130,6 +131,6 @@ export const register: Register = on => {
         </Box>
       )
     }
-    return band($, e, beneath, [text(rows[0]!), undefined, rows[1] ? text(rows[1]) : undefined])
+    return band($, e, [text(rows[0]!), toggle, rows[1] ? text(rows[1]) : undefined])
   })
 }

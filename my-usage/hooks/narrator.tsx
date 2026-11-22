@@ -54,9 +54,9 @@ Rules:
 
 Reply in exactly this form: the first line holds only the ISO 639-1 code of the language you speak (es, en, pt, fr...), and the narration starts on the second line.`
 
-const enabled = atom({ plugin: 'my-narrator', key: 'isEnabled' } as const, false)
-const speech = atom({ plugin: 'my-narrator', key: 'speech' } as const, null)
-const sweepStep = atom({ plugin: 'my-narrator', key: 'sweepStep' } as const, 0)
+const enabled = atom({ plugin: 'my-usage', key: 'isEnabled' } as const, false)
+const speech = atom({ plugin: 'my-usage', key: 'speech' } as const, null)
+const sweepStep = atom({ plugin: 'my-usage', key: 'sweepStep' } as const, 0)
 
 /** An answer this short is read out as it is: no model call to write a narration of it. */
 const SHORT_ANSWER = 0
@@ -424,7 +424,25 @@ async function setEnabled ($: EngineInterface, value?: boolean) {
   return isEnabled
 }
 
-export const register: Register = (on, options) => {
+let configured: Parameters<Register>[1] = {}
+
+/** Runs from the plugin's own session.start: registers /narrator and restores the saved on/off. */
+export async function startNarrator ($: EngineInterface) {
+  const options = configured
+  const asked = String(options.language ?? '').trim()
+  if (asked && !settings.language) $.ui.log(`narrator: "${cut(asked, 40)}" is not a language code (es, en, pt...): speaking the language you write in`, { to: 'debug' })
+  await $.command.register({
+    name: 'narrator',
+    description: 'Claude tells you out loud what it did after each turn · no argument: switch on or off',
+    argumentHint: '[on | off | stop | voices | test [voice]]',
+    immediate: true
+  })
+  const isEnabled = (await $.store.get('enabled')) === true
+  await update($, enabled, () => isEnabled)
+}
+
+export const registerNarrator = (on: Parameters<Register>[0], options: Parameters<Register>[1]) => {
+  configured = options
   const speed = Number(options.speed)
   const shortAnswer = Number(options.shortAnswer ?? SHORT_ANSWER)
   settings = {
@@ -434,20 +452,6 @@ export const register: Register = (on, options) => {
     shortAnswer: shortAnswer >= 0 ? shortAnswer : SHORT_ANSWER,
     language: languageOf(options.language)
   }
-
-  on('session.start', async ($, e, next) => {
-    const asked = String(options.language ?? '').trim()
-    if (asked && !settings.language) $.ui.log(`narrator: "${cut(asked, 40)}" is not a language code (es, en, pt...): speaking the language you write in`, { to: 'debug' })
-    await $.command.register({
-      name: 'narrator',
-      description: 'Claude tells you out loud what it did after each turn · no argument: switch on or off',
-      argumentHint: '[on | off | stop | voices | test [voice]]',
-      immediate: true
-    })
-    const isEnabled = (await $.store.get('enabled')) === true
-    await update($, enabled, () => isEnabled)
-    return next(e)
-  })
 
   on('session.end', ($, e, next) => {
     silence()
@@ -504,58 +508,38 @@ export const register: Register = (on, options) => {
     if (e.agentId === undefined && e.reason === 'answer' && e.answer.trim() && (await read($, enabled))) void narrate($, e.answer)
     return result
   })
-
-  // The toggle, in the band above the prompt: just an icon. A click turns the narrator on or off, and
-  // while it speaks, skips to the next narration in the line or stops it. Grey and crossed when off,
-  // green when on, blue with animated sound arcs while it speaks.
-  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const beneath = await next(e)
-    if (e.props.hasSurvey) return beneath
-    const isEnabled = await read($, enabled)
-    const speaking = await read($, speech)
-    const step = speaking ? await read($, sweepStep) : 0
-    const table = $.ui.resolve(e)
-    const state = speaking ? 'speaking' : isEnabled ? 'on' : 'off'
-    const { Box, Button, Text } = table
-
-    if (!('Svg' in table)) {
-      const glyph = state === 'off' ? '\u23F8\uFE0E narrator off' : state === 'on' ? '\u23F5 narrator on' : '\u23F9\uFE0E narrating'
-      return band($, e, beneath, [undefined, (
-        <Button key="narrator" plain onPress={() => press($)}>
-          <Text color={state === 'off' ? 'inactive' : state === 'on' ? 'success' : 'permission'}>{glyph}</Text>
-        </Button>
-      ), undefined])
-    }
-
-    // The icon is drawn, a Button is only text: an invisible one lies over it to take the click.
-    const label = speaking ? 'Stop narrating' : isEnabled ? 'Turn narrator off' : 'Turn narrator on'
-    return band($, e, beneath, [undefined, (
-      <Box key="narrator-icon" position="relative" width={4} height={1}>
-        <table.Svg source={micManSvg(state, step)} alt={label} width={30} height={22} />
-        <Box position="absolute" top={0} left={0}>
-          <Button key="narrator" plain label={'\u00A0\u00A0\u00A0\u00A0'} onPress={() => press($)} />
-        </Box>
-      </Box>
-    ), undefined])
-  })
 }
 
-/** The band is one row of three slots (left, center, right) that the mods share: each fills its own and keeps the others'. */
-const SLOTS = 'band-slots'
-const WIDTHS = ['38%', '24%', '38%'] as const
-const JUSTIFY = ['flex-start', 'center', 'flex-end'] as const
+/**
+ * The narrator's toggle for the band's center slot: just an icon. A click turns the narrator on or off, and
+ * while it speaks, skips to the next narration in the line or stops it. Grey and crossed when off,
+ * green when on, blue with animated sound arcs while it speaks.
+ */
+export async function narratorSlot ($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0]): Promise<RenderNode> {
+  const isEnabled = await read($, enabled)
+  const speaking = await read($, speech)
+  const step = speaking ? await read($, sweepStep) : 0
+  const table = $.ui.resolve(e)
+  const state = speaking ? 'speaking' : isEnabled ? 'on' : 'off'
+  const { Box, Button, Text } = table
 
-function band ($: EngineInterface, e: Parameters<EngineInterface['ui']['resolve']>[0], beneath: RenderNode | undefined, own: [RenderNode?, RenderNode?, RenderNode?]): RenderNode {
-  const { Box } = $.ui.resolve(e)
-  const isShared = typeof beneath === 'object' && beneath !== null && beneath.type === 'Box' && (beneath.props as { key?: string }).key === SLOTS
-  const prior = isShared ? ((beneath as { children?: RenderNode[] }).children ?? []) : []
-  const cells = [0, 1, 2].map(i => own[i] !== undefined
-    ? <Box width={WIDTHS[i]} flexDirection="row" justifyContent={JUSTIFY[i]} alignItems="center">{own[i]}</Box>
-    : prior[i] ?? <Box width={WIDTHS[i]} />)
+  if (!('Svg' in table)) {
+    const glyph = state === 'off' ? '\u23F8\uFE0E narrator off' : state === 'on' ? '\u23F5 narrator on' : '\u23F9\uFE0E narrating'
+    return (
+      <Button key="narrator" plain onPress={() => press($)}>
+        <Text color={state === 'off' ? 'inactive' : state === 'on' ? 'success' : 'permission'}>{glyph}</Text>
+      </Button>
+    )
+  }
+
+  // The icon is drawn, a Button is only text: an invisible one lies over it to take the click.
+  const label = speaking ? 'Stop narrating' : isEnabled ? 'Turn narrator off' : 'Turn narrator on'
   return (
-    <Box key={SLOTS} flexDirection="row" flexGrow={1} alignItems="center">
-      {cells}
-      {isShared ? prior[3] ?? null : beneath}
+    <Box key="narrator-icon" position="relative" width={4} height={1}>
+      <table.Svg source={micManSvg(state, step)} alt={label} width={30} height={22} />
+      <Box position="absolute" top={0} left={0}>
+        <Button key="narrator" plain label={'\u00A0\u00A0\u00A0\u00A0'} onPress={() => press($)} />
+      </Box>
     </Box>
   )
 }

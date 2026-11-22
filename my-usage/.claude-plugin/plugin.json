@@ -1,10 +1,45 @@
 {
   "name": "my-usage",
-  "version": "0.1.0",
-  "description": "5-hour and weekly subscription usage as color-coded bars above the prompt (green, yellow, red). Based on midudev's sub-meter.",
+  "version": "0.2.0",
+  "description": "5-hour and weekly subscription usage as color-coded bars above the prompt, with a speaker toggle in the middle: when on, Claude reads a short spoken summary of each answer. Based on midudev's sub-meter and narrator.",
   "types": "./types/index.d.ts",
   "author": {
     "name": "Javier Lopez"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "userConfig": {
+    "voice": {
+      "type": "string",
+      "title": "Voice",
+      "description": "A voice name to always speak with (/narrator voices lists them). Empty: best installed voice for the language.",
+      "default": ""
+    },
+    "language": {
+      "type": "string",
+      "title": "Language",
+      "description": "Language code to always narrate in (es, en, pt). Empty: the language you write in.",
+      "default": ""
+    },
+    "speed": {
+      "type": "number",
+      "title": "Speed",
+      "description": "Multiple of the voice's normal pace.",
+      "default": 1.2,
+      "min": 0.5,
+      "max": 2
+    },
+    "model": {
+      "type": "string",
+      "title": "Model that writes the narration",
+      "description": "An alias (haiku) or full model id.",
+      "default": "haiku"
+    },
+    "shortAnswer": {
+      "type": "number",
+      "title": "Read short answers as they are",
+      "description": "Answers up to this many characters are read verbatim, with no model call. 0: always summarize.",
+      "default": 0,
+      "min": 0
+    }
+  }
 }

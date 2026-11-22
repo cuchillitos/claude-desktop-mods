@@ -1,8 +1,13 @@
 {
   "name": "claude-desktop-mods",
-  "owner": { "name": "Javier Lopez" },
+  "owner": {
+    "name": "Javier Lopez"
+  },
   "plugins": [
-    { "name": "my-usage", "source": "./my-usage", "description": "5-hour and weekly subscription usage as color-coded bars above the prompt." },
-    { "name": "my-narrator", "source": "./my-narrator", "description": "A speaker toggle above the prompt: Claude reads a short spoken summary of each answer." }
+    {
+      "name": "my-usage",
+      "source": "./my-usage",
+      "description": "5-hour and weekly usage bars above the prompt, plus a speaker toggle that reads a summary of each answer aloud."
+    }
   ]
 }
